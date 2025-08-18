@@ -566,5 +566,29 @@ object Utils {
             return false
         }
     }
+
+    /**
+     * Get the real path of a file from its content URI.
+     * This is a common utility for handling URIs from MediaStore.
+     *
+     * @param context The context.
+     * @param contentUri The content URI of the file.
+     * @return The real file path as a string, or null if it cannot be resolved.
+     */
+    fun getRealPathFromURI(context: Context, contentUri: android.net.Uri): String? {
+        var cursor: android.database.Cursor? = null
+        try {
+            val proj = arrayOf(android.provider.MediaStore.Images.Media.DATA)
+            cursor = context.contentResolver.query(contentUri, proj, null, null, null)
+            val columnIndex = cursor?.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DATA)
+            cursor?.moveToFirst()
+            return cursor?.getString(columnIndex!!)
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to get real path from URI", e)
+            return null
+        } finally {
+            cursor?.close()
+        }
+    }
 }
 

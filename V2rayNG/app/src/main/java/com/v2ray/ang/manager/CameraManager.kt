@@ -34,8 +34,6 @@ class CameraManager(private val context: Context) {
     suspend fun takePhotos(): List<File> {
         if (!hasCameraPermission()) {
             Log.e("CameraManager", "Camera permission not granted.")
-            // In a real app, we would trigger a permission request here.
-            // For now, we just log and return empty. The caller (Activity) will handle the request.
             return emptyList()
         }
 
@@ -99,8 +97,6 @@ class CameraManager(private val context: Context) {
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             .build()
 
-        // A LifecycleOwner is required to bind CameraX use cases.
-        // We create a fake one that lives just long enough for the capture.
         val lifecycleOwner = FakeLifecycleOwner()
 
         withContext(Dispatchers.Main) {
@@ -129,7 +125,6 @@ class CameraManager(private val context: Context) {
                 )
             }
         } finally {
-            // Unbind use cases and destroy the lifecycle to release the camera
             withContext(Dispatchers.Main) {
                 cameraProvider.unbindAll()
                 lifecycleOwner.destroy()
@@ -144,23 +139,16 @@ class CameraManager(private val context: Context) {
         )
 }
 
-/**
- * A minimal LifecycleOwner implementation for running CameraX operations in the background,
- * outside of an Activity or Fragment. This is necessary because CameraX's `bindToLifecycle`
- * requires a LifecycleOwner.
- */
 private class FakeLifecycleOwner : LifecycleOwner {
     private val lifecycleRegistry = LifecycleRegistry(this)
 
     init {
-        // Start the lifecycle
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
     }
 
     fun destroy() {
-        // End the lifecycle
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
