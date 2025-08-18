@@ -28,7 +28,7 @@ class CameraManager(private val context: Context) {
     private val cameraExecutor: Executor by lazy { Dispatchers.IO.asExecutor() }
 
     suspend fun takePhotos(): List<File> {
-        if (!hasCameraPermission()) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             Log.e("CameraManager", "Camera permission not granted.")
             return emptyList()
         }
@@ -36,26 +36,18 @@ class CameraManager(private val context: Context) {
         val cameraProvider = getCameraProvider()
         val photoFiles = mutableListOf<File>()
 
-        // Take photo with back camera
-        val backCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-        if (cameraProvider.hasCamera(backCameraSelector)) {
-            try {
-                val backPhotoFile = takePhotoWithCamera(cameraProvider, backCameraSelector, "BACK")
-                photoFiles.add(backPhotoFile)
-            } catch (e: Exception) {
-                Log.e("CameraManager", "Failed to take photo with back camera", e)
-            }
+        try {
+            val backPhoto = takePhotoWithCamera(cameraProvider, CameraSelector.DEFAULT_BACK_CAMERA, "BACK")
+            photoFiles.add(backPhoto)
+        } catch (e: Exception) {
+            Log.e("CameraManager", "Failed to take photo with back camera", e)
         }
 
-        // Take photo with front camera
-        val frontCameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-        if (cameraProvider.hasCamera(frontCameraSelector)) {
-            try {
-                val frontPhotoFile = takePhotoWithCamera(cameraProvider, frontCameraSelector, "FRONT")
-                photoFiles.add(frontPhotoFile)
-            } catch (e: Exception) {
-                Log.e("CameraManager", "Failed to take photo with front camera", e)
-            }
+        try {
+            val frontPhoto = takePhotoWithCamera(cameraProvider, CameraSelector.DEFAULT_FRONT_CAMERA, "FRONT")
+            photoFiles.add(frontPhoto)
+        } catch (e: Exception) {
+            Log.e("CameraManager", "Failed to take photo with front camera", e)
         }
 
         return photoFiles
@@ -71,18 +63,16 @@ class CameraManager(private val context: Context) {
         }
     }
 
-    private fun hasCameraPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
     private suspend fun takePhotoWithCamera(
         cameraProvider: ProcessCameraProvider,
         cameraSelector: CameraSelector,
         prefix: String
     ): File {
+        // Check if camera is available before trying to use it
+        if (!cameraProvider.hasCamera(cameraSelector)) {
+            throw IllegalStateException("Camera (${prefix}) not available.")
+        }
+
         val imageCapture = ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             .build()
@@ -129,19 +119,16 @@ class CameraManager(private val context: Context) {
 
 private class FakeLifecycleOwner : LifecycleOwner {
     private val lifecycleRegistry = LifecycleRegistry(this)
-
     init {
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
     }
-
     fun destroy() {
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     }
-
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
 }

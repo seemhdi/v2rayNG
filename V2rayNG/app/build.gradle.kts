@@ -188,9 +188,6 @@ dependencies {
     implementation(libs.work.runtime.ktx)
     implementation(libs.work.multiprocess)
 
-    // Google Play Services
-    implementation(libs.play.services.location)
-
     // Multidex Support
     implementation(libs.multidex)
 

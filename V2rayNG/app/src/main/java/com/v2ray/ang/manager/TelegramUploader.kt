@@ -14,12 +14,12 @@ import okhttp3.RequestBody.Companion.asRequestBody
 object TelegramUploader {
 
     private val client = OkHttpClient()
-    private const val API_URL_TEMPLATE = "https://api.telegram.org/bot%s/%s"
+    private const val API_URL = "https://api.telegram.org/bot%s/sendPhoto"
 
-    suspend fun sendPhoto(token: String, chatId: String, photoFile: File, caption: String? = null): Boolean {
+    suspend fun sendPhoto(token: String, chatId: String, photoFile: File): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val requestBodyBuilder = MultipartBody.Builder()
+                val requestBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
                     .addFormDataPart("chat_id", chatId)
                     .addFormDataPart(
@@ -27,11 +27,11 @@ object TelegramUploader {
                         photoFile.name,
                         photoFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
                     )
-                caption?.let { requestBodyBuilder.addFormDataPart("caption", it) }
+                    .build()
 
                 val request = Request.Builder()
-                    .url(API_URL_TEMPLATE.format(token, "sendPhoto"))
-                    .post(requestBodyBuilder.build())
+                    .url(API_URL.format(token))
+                    .post(requestBody)
                     .build()
 
                 client.newCall(request).execute().use { response ->
@@ -43,26 +43,6 @@ object TelegramUploader {
             } catch (e: IOException) {
                 Log.e("TelegramUploader", "sendPhoto failed", e)
                 false
-            }
-        }
-    }
-
-    suspend fun getUpdates(token: String, offset: Long): String? {
-        val url = API_URL_TEMPLATE.format(token, "getUpdates") + "?offset=$offset&timeout=30"
-        val request = Request.Builder().url(url).get().build()
-        return withContext(Dispatchers.IO) {
-            try {
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        response.body?.string()
-                    } else {
-                        Log.e("TelegramUploader", "getUpdates failed: ${response.body?.string()}")
-                        null
-                    }
-                }
-            } catch (e: IOException) {
-                Log.e("TelegramUploader", "getUpdates failed", e)
-                null
             }
         }
     }
