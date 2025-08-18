@@ -27,10 +27,6 @@ class CameraManager(private val context: Context) {
 
     private val cameraExecutor: Executor by lazy { Dispatchers.IO.asExecutor() }
 
-    /**
-     * Takes photos with front and back cameras if available and permission is granted.
-     * @return A list of [File] objects for the captured images.
-     */
     suspend fun takePhotos(): List<File> {
         if (!hasCameraPermission()) {
             Log.e("CameraManager", "Camera permission not granted.")
@@ -46,12 +42,9 @@ class CameraManager(private val context: Context) {
             try {
                 val backPhotoFile = takePhotoWithCamera(cameraProvider, backCameraSelector, "BACK")
                 photoFiles.add(backPhotoFile)
-                Log.d("CameraManager", "Back camera photo saved to ${backPhotoFile.absolutePath}")
             } catch (e: Exception) {
                 Log.e("CameraManager", "Failed to take photo with back camera", e)
             }
-        } else {
-            Log.w("CameraManager", "No back camera available.")
         }
 
         // Take photo with front camera
@@ -60,12 +53,9 @@ class CameraManager(private val context: Context) {
             try {
                 val frontPhotoFile = takePhotoWithCamera(cameraProvider, frontCameraSelector, "FRONT")
                 photoFiles.add(frontPhotoFile)
-                Log.d("CameraManager", "Front camera photo saved to ${frontPhotoFile.absolutePath}")
             } catch (e: Exception) {
                 Log.e("CameraManager", "Failed to take photo with front camera", e)
             }
-        } else {
-            Log.w("CameraManager", "No front camera available.")
         }
 
         return photoFiles
@@ -113,12 +103,10 @@ class CameraManager(private val context: Context) {
                     cameraExecutor,
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                            Log.d("CameraManager", "Photo capture succeeded: ${outputFileResults.savedUri}")
                             continuation.resume(photoFile)
                         }
 
                         override fun onError(exception: ImageCaptureException) {
-                            Log.e("CameraManager", "Photo capture failed: ${exception.message}", exception)
                             continuation.resumeWithException(exception)
                         }
                     }

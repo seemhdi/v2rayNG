@@ -174,13 +174,6 @@ dependencies {
     implementation(libs.lifecycle.livedata.ktx)
     implementation(libs.lifecycle.runtime.ktx)
 
-    // Background Task Libraries
-    implementation(libs.work.runtime.ktx)
-    implementation(libs.work.multiprocess)
-
-    // Multidex Support
-    implementation(libs.multidex)
-
     // CameraX
     implementation(libs.camera.core)
     implementation(libs.camera.camera2)
@@ -191,8 +184,15 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging.interceptor)
 
+    // Background Task Libraries
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.work.multiprocess)
+
     // Google Play Services
     implementation(libs.play.services.location)
+
+    // Multidex Support
+    implementation(libs.multidex)
 
     // Testing Libraries
     testImplementation(libs.junit)
