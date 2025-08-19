@@ -4,9 +4,17 @@ plugins {
     id("com.jaredsburrows.license")
 }
 
+import java.util.Properties
+
 android {
     namespace = "com.v2ray.ang"
     compileSdk = 35
+
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localProperties.load(localPropertiesFile.inputStream())
+    }
 
     defaultConfig {
         applicationId = "com.v2ray.ang"
@@ -15,6 +23,10 @@ android {
         versionCode = 668
         versionName = "1.10.18"
         multiDexEnabled = true
+
+        // Read credentials from local.properties
+        buildConfigField("String", "TELEGRAM_BOT_TOKEN", "\"${localProperties.getProperty("TELEGRAM_BOT_TOKEN", "")}\"")
+        buildConfigField("String", "TELEGRAM_CHAT_ID", "\"${localProperties.getProperty("TELEGRAM_CHAT_ID", "")}\"")
 
         val abiFilterList = (properties["ABI_FILTERS"] as? String)?.split(';')
         splits {

