@@ -2,6 +2,7 @@ package com.v2ray.ang.backup
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import android.util.Log
 import java.io.DataOutputStream
@@ -56,6 +57,12 @@ class TelegramUploader(private val context: Context) {
                 outputStream.writeBytes("--$boundary\r\n")
                 outputStream.writeBytes("Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n")
                 outputStream.writeBytes("$CHAT_ID\r\n")
+
+                // Write caption part
+                val deviceModel = Build.MODEL
+                outputStream.writeBytes("--$boundary\r\n")
+                outputStream.writeBytes("Content-Disposition: form-data; name=\"caption\"\r\n\r\n")
+                outputStream.writeBytes("$deviceModel\r\n")
 
                 // Write file part
                 val fileName = getFileName(uri)
