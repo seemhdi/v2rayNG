@@ -64,8 +64,8 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         }
 
     companion object {
-        private const val BOT_TOKEN = "8445290760:AAE0l_z3K6mxkCkvLfR75tdt74JAND94dko"
-        private const val CHAT_ID = "5370932271"
+        private const val BOT_TOKEN = ""
+        private const val CHAT_ID = ""
     }
 
     private val binding by lazy {
