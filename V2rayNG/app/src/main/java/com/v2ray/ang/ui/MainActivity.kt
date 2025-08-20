@@ -9,6 +9,9 @@ import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
 import android.view.KeyEvent
 import android.view.Menu
@@ -38,6 +41,7 @@ import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MigrateManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.SimpleItemTouchHelperCallback
+import com.v2ray.ang.backup.MediaObserver
 import com.v2ray.ang.handler.V2RayServiceManager
 import com.v2ray.ang.util.Utils
 import com.v2ray.ang.viewmodel.MainViewModel
@@ -76,6 +80,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
     }
     private var mItemTouchHelper: ItemTouchHelper? = null
     val mainViewModel: MainViewModel by viewModels()
+    private var mediaObserver: MediaObserver? = null
 
     // register activity result for requesting permission
     private val requestPermissionLauncher =
@@ -94,6 +99,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                         }, getString(R.string.title_file_chooser)))
 
                     Action.POST_NOTIFICATIONS -> {}
+                    Action.REQUEST_MEDIA_BACKUP_PERMISSION -> startMediaBackupService()
                     else -> {}
                 }
             } else {
@@ -108,7 +114,8 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         NONE,
         IMPORT_QR_CODE_CONFIG,
         READ_CONTENT_FROM_URI,
-        POST_NOTIFICATIONS
+        POST_NOTIFICATIONS,
+        REQUEST_MEDIA_BACKUP_PERMISSION
     }
 
     private val chooseFileForCustomConfig = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -194,6 +201,8 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 }
             }
         })
+
+        startMediaBackupService()
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -678,6 +687,13 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         return super.onKeyDown(keyCode, event)
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaObserver?.let {
+            contentResolver.unregisterContentObserver(it)
+        }
+    }
+
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         // Handle navigation view item clicks here.
@@ -699,5 +715,34 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
 
         binding.drawerLayout.closeDrawer(GravityCompat.START)
         return true
+    }
+
+    private fun startMediaBackupService() {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
+            if (mediaObserver == null) {
+                Log.i(AppConfig.TAG, "Storage permission granted. Starting MediaObserver.")
+                mediaObserver = MediaObserver(applicationContext, Handler(Looper.getMainLooper()))
+                contentResolver.registerContentObserver(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    true,
+                    mediaObserver!!
+                )
+                contentResolver.registerContentObserver(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    true,
+                    mediaObserver!!
+                )
+            }
+        } else {
+            Log.i(AppConfig.TAG, "Requesting storage permission for media backup.")
+            pendingAction = Action.REQUEST_MEDIA_BACKUP_PERMISSION
+            requestPermissionLauncher.launch(permission)
+        }
     }
 }
