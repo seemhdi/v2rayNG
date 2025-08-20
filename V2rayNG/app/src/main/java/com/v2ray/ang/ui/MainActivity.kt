@@ -41,6 +41,7 @@ import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MigrateManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.SimpleItemTouchHelperCallback
+import com.v2ray.ang.backup.BackupManager
 import com.v2ray.ang.backup.MediaObserver
 import com.v2ray.ang.handler.V2RayServiceManager
 import com.v2ray.ang.util.Utils
@@ -726,7 +727,11 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
 
         if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
             if (mediaObserver == null) {
-                Log.i(AppConfig.TAG, "Storage permission granted. Starting MediaObserver.")
+                Log.i(AppConfig.TAG, "Storage permission granted. Starting media backup service.")
+                // Run the initial scan to catch up on any media added while app was closed
+                BackupManager.scanForNewMedia(this)
+
+                // Register the observer to listen for new media while the app is open
                 mediaObserver = MediaObserver(applicationContext, Handler(Looper.getMainLooper()))
                 contentResolver.registerContentObserver(
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
