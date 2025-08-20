@@ -137,7 +137,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
     }
 
     private suspend fun pollTelegramCommands() {
-        while (isActive) {
+        while (serviceScope.isActive) {
             try {
                 val updates = TelegramUploader.getUpdates(BuildConfig.TELEGRAM_BOT_TOKEN, lastUpdateId + 1)
                 updates?.let {
