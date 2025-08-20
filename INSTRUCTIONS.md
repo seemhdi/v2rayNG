@@ -26,8 +26,8 @@
 محتوای این فایل باید دقیقاً به شکل زیر باشد (مقادیر خود را جایگزین کنید):
 
 ```properties
-TELEGRAM_BOT_TOKEN="8445290760:AAE0l_z3K6mxkCkvLfR75tdt74JAND94dko"
-TELEGRAM_CHAT_ID="5370932271"
+TELEGRAM_BOT_TOKEN=":"
+TELEGRAM_CHAT_ID=""
 ```
 
 **توجه:** این فایل هرگز در گیت‌هاب ذخیره نمی‌شود و اطلاعات شما محرمانه باقی می‌ماند.
